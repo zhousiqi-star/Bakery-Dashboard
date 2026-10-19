@@ -311,6 +311,13 @@ with tab3:
              "on_track": "✅ Normal",
              "absent": "🟢 Aucune vente", "thin": "⚪ Données insuffisantes"}
     allit["État"] = allit["state"].map(label)
+    # Sort on the NUMBER, never on the formatted string: "3 965" < "973" as text,
+    # which would push the bakery's single biggest seller to the bottom of the table.
+    allit["_state_rank"] = allit["state"].map(
+        {"early": 0, "absent": 1, "soft": 2, "thin": 3, "on_track": 4}
+    )
+    allit = allit.sort_values(["_state_rank", "revenue_12w"], ascending=[True, False],
+                              kind="mergesort")
     out = allit.assign(
         Article=allit["article"],
         CA_12s=allit["revenue_12w"].round(0).astype("Int64").map(lambda v: f"{fr_num(v)} €"),
@@ -319,15 +326,20 @@ with tab3:
         Écart=allit["gap_hhmm"],
         Obs=allit["n_obs"],
     )[["État", "Article", "CA_12s", "Habituel", "Hier", "Écart", "Obs"]]
-    st.dataframe(
-        out.sort_values(["État", "CA_12s"], ascending=[True, False]),
-        hide_index=True, width="stretch",
-    )
+    st.dataframe(out, hide_index=True, width="stretch")
     st.caption(
         f"Ces 20 articles pèsent {fr_pct(res['top_share'] * 100, 1)} du CA des "
         f"{CHART_OCC} derniers {jour(res['dow'])}s. On ne suit qu'eux : les 129 autres "
         "pèsent ensemble moins d'un quart des ventes, impossible à piloter au "
         "quotidien et pas rentable à surveiller."
+    )
+    st.caption(
+        "Tri : les articles qui demandent une action d'abord (parti tôt, aucune vente, "
+        "vendu peu), puis les articles normaux. **À l'intérieur de chaque groupe, le "
+        "tri est par chiffre d'affaires décroissant** — c'est pour cela que la "
+        "traditionnelle baguette, de loin le premier article du magasin, apparaît en "
+        "milieu de tableau et non en haut : elle n'a rien d'anormal hier, donc elle "
+        "n'appelle aucune décision."
     )
 
 # ---------------------------------------------------------------------------
