@@ -27,7 +27,11 @@ import pandas as pd
 
 DATA_PATH = Path(__file__).parent / "data" / "bakery_sales.csv"
 
-WEEKDAY_NAMES = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"]
+# Code, data and documentation stay in English; only the Streamlit layer is
+# translated, because the bakery itself is French (see README, "Language").
+# This module therefore returns English weekday names and English state keys;
+# app.py is the only file that speaks French.
+WEEKDAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 # ---- tunable windows (counted in same-weekday occurrences, never in days) ----
 YOY_MIN_DAYS = 360          # "one year ago" window, in calendar days ...

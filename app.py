@@ -1,12 +1,16 @@
-"""Bakery production dashboard - Streamlit app.
+"""Tableau de bord de production — application Streamlit.
 
-Who it is for : the production manager (chef de production) of a single French
-                bakery, at 06:30, before the first bake of the day.
-What it does  : tells him which items ran out too early yesterday (bake more)
-                and which ones sold clearly below their own normal share
-                (bake less) - so he can change every batch this morning.
+Public      : la responsable de production d'une boulangerie française, à 06h30,
+              cinq minutes avant la première fournée du matin.
+Ce qu'elle   : quels articles sont partis trop tôt hier (à enfourner en plus) et
+fait         lesquels se sont nettement moins vendus que d'habitude (à enfourner
+              en moins) — pour ajuster chaque fournée ce matin même.
 
-Run: streamlit run app.py
+Langue : français. Le jeu de données appartient à une boulangerie française
+(articles en français, prix au format « 0,90 € »), donc l'écran parle la langue
+du terrain, pas celle du cours.
+
+Lancer : streamlit run app.py
 """
 
 from __future__ import annotations
@@ -14,26 +18,59 @@ from __future__ import annotations
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
-from plotly.subplots import make_subplots
 
 from bakery import (
     CHART_OCC,
     DATA_PATH,
     SOFT_SHARE_RATIO,
-    load_sales,
     analyze,
+    load_sales,
 )
 
-# 改成你的组名 —— 作业 Step 5 第 1 条要求标题里带队名。
-TEAM_NAME = "Group 4"
+TEAM_NAME = "Siqi Zhou"
 
-st.set_page_config(page_title="Bakery production dashboard", layout="wide")
+# bakery.py stays English on purpose; this is the one place that translates.
+JOURS = ["lundi", "mardi", "mercredi", "jeudi", "vendredi", "samedi", "dimanche"]
+
+
+def jour(dow: int) -> str:
+    """0 -> 'lundi' (French weekday name for the UI)."""
+    return JOURS[dow]
+
+
+# strftime %B depends on the OS locale; Windows would print "January".
+MOIS = ["janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+        "août", "septembre", "octobre", "novembre", "décembre"]
+
+
+def fr_month(d) -> str:
+    return f"{MOIS[d.month - 1]} {d.year}"
+
+
+def fr_num(x: float, dec: int = 0) -> str:
+    """1234.5 -> '1 234,5' (espace fine insécable + virgule décimale, usage FR)."""
+    s = f"{x:,.{dec}f}"
+    return s.replace(",", "\u202f").replace(".", ",")
+
+
+def fr_pct(x: float, dec: int = 0, signed: bool = False) -> str:
+    sign = "+" if (signed and x >= 0) else ""
+    return f"{sign}{fr_num(x, dec)} %"
+
+
+def fr_articles(n: int) -> str:
+    """1 -> '1 article', 4 -> '4 articles' (French plural rule)."""
+    return f"{n} article" if n == 1 else f"{n} articles"
+
+
+st.set_page_config(page_title="Tableau de bord production — boulangerie",
+                   layout="wide")
 
 
 # ---------------------------------------------------------------------------
-# data
+# données
 # ---------------------------------------------------------------------------
-@st.cache_data(show_spinner="读取 234,005 行小票数据…")
+@st.cache_data(show_spinner="Lecture des 234 005 lignes de caisse…")
 def get_data() -> pd.DataFrame:
     return load_sales(DATA_PATH)
 
@@ -44,37 +81,45 @@ data_start = df["date"].min()
 data_end = df["date"].max()
 
 # ---------------------------------------------------------------------------
-# header
+# en-tête
 # ---------------------------------------------------------------------------
-st.title("🥖 今天早上该多烤什么、少烤什么")
+st.title("🥖 Ce matin : on enfourne quoi de plus, quoi de moins ?")
 st.caption(
-    f"{TEAM_NAME} · 给这家的**生产主管**看的：每天 06:30 开炉前 5 分钟，"
-    "用昨天收银机的数据决定今天每一炉的产量。"
+    f"{TEAM_NAME} · Pour la **responsable de production** de cette boulangerie : "
+    "chaque matin à 06h30, cinq minutes avant la première fournée, pour décider "
+    "des quantités du jour à partir des ventes d'hier."
 )
 
 # ---------------------------------------------------------------------------
-# filter — the only one he needs
+# le seul filtre dont elle a besoin
 # ---------------------------------------------------------------------------
 dow_options = {
-    "周一": 0, "周二": 1, "周三": 2, "周四": 3, "周五": 4, "周六": 5, "周日": 6,
+    "lundi": 0, "mardi": 1, "mercredi": 2, "jeudi": 3,
+    "vendredi": 4, "samedi": 5, "dimanche": 6,
 }
 c1, c2, c3 = st.columns([1, 1, 2])
 with c1:
     dow_label = st.selectbox(
-        "看哪个星期几",
-        list(dow_options),
+        "Quel jour de la semaine ?",
+        [k.capitalize() for k in dow_options],
         index=4,
-        help="不同星期的销量差 2.5 倍（周日占全年营收 22.6%，周三 9.0%），"
-             "所以每个星期都要跟它自己的历史比。",
+        help="Les ventes varient d'un facteur 2,5 selon le jour (le dimanche pèse "
+             "22,6 % du CA annuel, le mercredi 9,0 %). Chaque jour se compare donc "
+             "à son propre historique, jamais à une moyenne tous jours confondus.",
     )
-res = analyze(df, dow_options[dow_label])
+res = analyze(df, dow_options[dow_label.lower()])
 
 with c2:
-    st.metric("分析的日子", f"{res['day']:%m-%d}", help=f"{res['weekday']}，数据集里该星期第 {res['n_occ']} 次营业")
+    st.metric(
+        "Jour analysé", f"{res['day']:%d/%m}",
+        help=f"{jour(res['dow']).capitalize()} — {res['n_occ']}e occurrence de ce jour "
+             "de la semaine dans le jeu de données.",
+    )
 with c3:
     st.markdown(
         f"<div style='padding-top:1.6rem;color:#666;font-size:0.9rem'>"
-        f"这台收银机当天录了 <b>{res['lines_day']:,}</b> 行、<b>{res['tickets_day']:,}</b> 张小票"
+        f"Ce jour-là, la caisse a enregistré <b>{fr_num(res['lines_day'])}</b> lignes "
+        f"sur <b>{fr_num(res['tickets_day'])}</b> tickets"
         f"</div>",
         unsafe_allow_html=True,
     )
@@ -82,74 +127,81 @@ with c3:
 st.divider()
 
 # ---------------------------------------------------------------------------
-# top: the three headline numbers
+# haut : les trois chiffres de tête
 # ---------------------------------------------------------------------------
-basis_txt = "去年同期同一天" if res["rev_basis"] == "yoy" else "前 4 个同星期"
+basis_txt = "le même jour l'an dernier" if res["rev_basis"] == "yoy" else "les 4 mêmes jours précédents"
 rev_delta = res["rev_delta"]
 
 m1, m2, m3 = st.columns(3)
 with m1:
     st.metric(
-        f"{res['weekday']}营收",
-        f"{res['rev_day']:,.0f} €",
-        delta=f"{rev_delta:+.1f}% vs {basis_txt}" if pd.notna(rev_delta) else None,
-        help="跟「去年同一天」比，不是跟上周比——上周可能还在旺季末尾，"
-             "跟上周比会把季节回落当成生意变差。",
+        f"CA du {jour(res['dow'])}",
+        f"{fr_num(res['rev_day'])} €",
+        delta=f"{fr_pct(rev_delta, 1, signed=True)} vs {basis_txt}" if pd.notna(rev_delta) else None,
+        help="La comparaison se fait avec le même jour l'an dernier, pas avec la "
+             "semaine dernière : la semaine dernière est encore souvent en fin de "
+             "pic estival, et cette comparaison prendrait la décrue saisonnière "
+             "pour une baisse d'activité.",
     )
 with m2:
     st.metric(
-        "该多烤的单品",
-        f"{len(res['early'])} 个",
-        help="昨天比它自己平常的时候更早就卖完了，而且还卖得动 → 明天多做",
+        "À enfourner en plus",
+        fr_articles(len(res["early"])),
+        help="Hier, ils sont partis plus tôt que leur heure habituelle **et** ils "
+             "se vendaient encore normalement → rupture, donc à produire davantage.",
     )
 with m3:
     n_cut = len(set(res["absent"]["article"]) | set(res["soft"]["article"]))
     st.metric(
-        "该少烤的单品",
-        f"{n_cut} 个",
-        help="昨天干脆没卖出去，或者销量掉到它自己正常份额的 60% 以下（而且没有提前卖完）→ 明天少做",
+        "À enfourner en moins",
+        fr_articles(n_cut),
+        help="Hier, ils ne se sont pas vendus du tout, ou leur part des ventes du "
+             f"magasin est tombée sous {fr_pct(SOFT_SHARE_RATIO * 100)} de leur part "
+             "habituelle (sans être partis trop tôt) → à produire moins.",
     )
 
 # ---------------------------------------------------------------------------
-# middle: the two charts that explain why
+# milieu : les deux graphiques qui expliquent pourquoi
 # ---------------------------------------------------------------------------
-st.subheader("为什么是这个数")
+st.subheader("Pourquoi ces chiffres")
 
 left, right = st.columns([1, 1], gap="large")
 
 with left:
-    st.markdown(f"**① 最近 {CHART_OCC} 个{res['weekday']}的营收 vs 它自己的基线**")
+    st.markdown(f"**① CA des {CHART_OCC} derniers {jour(res['dow'])}s vs sa propre base**")
     ch = res["chart1"]
     fig = go.Figure()
     fig.add_bar(
-        x=ch["date"], y=ch["revenue"], name="当天营收",
+        x=ch["date"], y=ch["revenue"], name="CA du jour",
         marker_color=["#c0392b" if r else "#95a5a6" for r in ch["is_day"]],
     )
     fig.add_scatter(
-        x=ch["date"], y=ch["baseline"], name="基线",
+        x=ch["date"], y=ch["baseline"], name="Base",
         mode="lines+markers", line=dict(color="#2c3e50", width=2, dash="dot"),
     )
     fig.update_layout(
-        height=340, margin=dict(l=0, r=0, t=10, b=0),
+        height=340, margin=dict(l=0, r=0, t=30, b=0),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
         yaxis_title="€", xaxis_title=None,
         hovermode="x unified",
-        xaxis=dict(tickformat="%m-%d"),
+        xaxis=dict(tickformat="%d/%m"),
     )
-    st.plotly_chart(fig, width='stretch')
+    st.plotly_chart(fig, width="stretch")
     st.caption(
-        "灰柱是已有数据，红柱是分析当天。断口是歇业日，不是营收 0——"
-        "这家店 37 天没开门，其中 29 天是周三（2021 年 1–4 月每周三不开）。"
+        "Les barres grises sont l'historique, la barre rouge est le jour analysé. "
+        "Les trous sont des jours de fermeture, pas un CA de 0 — la boulangerie a "
+        "fermé 37 jours, dont 29 mercredis (fermeture hebdomadaire de janvier à avril 2021)."
     )
 
 with right:
-    st.markdown(f"**② TOP-20 单品昨天最后卖出的时刻**")
-    it = res["items"].dropna(subset=["today_minute"]).sort_values("revenue_12w", ascending=False).head(20)
-    it = it.sort_values("base_minute")
+    st.markdown("**② Heure de la dernière vente hier — top 20**")
+    it = (res["items"].dropna(subset=["today_minute"])
+          .sort_values("revenue_12w", ascending=False).head(20)
+          .sort_values("base_minute"))
     fig2 = go.Figure()
     fig2.add_scatter(
         x=it["base_minute"] / 60, y=it["article"], mode="markers",
-        name="它自己的平常时刻（中位）",
+        name="Son heure habituelle (médiane)",
         marker=dict(color="#bdc3c7", size=9, symbol="line-ns-open",
                     line=dict(width=2, color="#7f8c8d")),
     )
@@ -157,150 +209,184 @@ with right:
               for s in it["state"]]
     fig2.add_scatter(
         x=it["today_minute"] / 60, y=it["article"], mode="markers",
-        name="昨天实际",
+        name="Hier, en réel",
         marker=dict(color=colors, size=11),
-        text=[f"{a}：基线 {b} → 昨天 {t}" for a, b, t in
+        text=[f"{a} : base {b} → hier {t}" for a, b, t in
               zip(it["article"], it["base_hhmm"], it["today_hhmm"])],
         hoverinfo="text",
     )
     fig2.update_layout(
-        height=340, margin=dict(l=0, r=0, t=10, b=0),
+        height=340, margin=dict(l=0, r=0, t=30, b=0),
         legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0),
-        xaxis=dict(title="售出时刻（小时，24h）", range=[6, 21]),
+        xaxis=dict(title="Heure de la dernière vente (h, 24 h)", range=[6, 21]),
         yaxis_title=None,
     )
-    st.plotly_chart(fig2, width='stretch')
+    st.plotly_chart(fig2, width="stretch")
     st.caption(
-        "同一个「卖完」时刻，对面包和对甜点是两件完全不同的事："
-        "法棍平常卖到 18:45（全天补烤），布里欧修 12:32 就收工（早上一次出炉）。"
-        "所以基线是每个单品**自己的**中位时刻，不是统一的钟点。"
+        "Une même « heure de fin » ne veut pas dire la même chose pour un pain et "
+        "pour une viennoiserie : la baguette se vend jusqu'à 18h42 (cuisson étalée "
+        "toute la journée), la brioche s'arrête à 12h24 (une seule fournée le matin). "
+        "La base est donc l'heure médiane **de chaque article**, pas une heure de "
+        "référence unique."
     )
 
 st.divider()
 
 # ---------------------------------------------------------------------------
-# bottom: the two action lists
+# bas : les deux listes d'action
 # ---------------------------------------------------------------------------
+n_cut_total = len(set(res["absent"]["article"]) | set(res["soft"]["article"]))
 tab1, tab2, tab3 = st.tabs(
-    [f"🔴 今天多烤（{len(res['early'])}）",
-     f"🟢 今天少烤（{len(set(res['absent']['article']) | set(res['soft']['article']))}）",
-     "全部 TOP-20"]
+    [f"🔴 Enfourner plus ({len(res['early'])})",
+     f"🟢 Enfourner moins ({n_cut_total})",
+     "Top 20 complet"]
 )
 
 with tab1:
     if res["early"].empty:
-        st.info("没有单品比它自己的常态更早卖完 —— 今天的产量按平常走。")
+        st.info("Aucun article n'est parti plus tôt que son habitude — "
+                "on garde les quantités habituelles ce matin.")
     else:
         show = res["early"].copy()
         show = show.assign(
-            单品=show["article"],
-            平常卖到=show["base_hhmm"],
-            昨天卖到=show["today_hhmm"],
-            早了=show["gap_hhmm"],
-            昨天销量=show["today_qty"].round(0).astype("Int64"),
-            平常销量=show["base_qty"].round(0).astype("Int64"),
-            近12期营收=(show["revenue_12w"] / 12).round(1).map(lambda v: f"{v:.0f} €/期"),
+            Article=show["article"],
+            Habituel=show["base_hhmm"],
+            Hier=show["today_hhmm"],
+            Écart=show["gap_hhmm"],
+            Qté_hier=show["today_qty"].round(0).astype("Int64"),
+            Qté_hab=show["base_qty"].round(0).astype("Int64"),
+            CA_12s=(show["revenue_12w"] / 12).round(1).map(lambda v: f"{fr_num(v)} €/sem."),
         )
         st.dataframe(
-            show[["单品", "平常卖到", "昨天卖到", "早了", "昨天销量", "平常销量", "近12期营收"]],
-            hide_index=True, width='stretch',
+            show[["Article", "Habituel", "Hier", "Écart", "Qté_hier", "Qté_hab", "CA_12s"]],
+            hide_index=True, width="stretch",
         )
         st.caption(
-            f"判定：昨天的最后售出时刻比它自己近 12 个{res['weekday']}的中位时刻早 30 分钟以上，"
-            "**并且**昨天销量仍达到平常的 80% 以上。"
-            "第二条是为了排除「本来就卖得差」——只早不少卖，才说明是卖光了，不是没人买。"
+            f"Règle : la dernière vente d'hier tombe au moins 30 minutes avant l'heure "
+            f"médiane de ses {12} derniers {jour(res['dow'])}s, **et** les quantités "
+            "vendues atteignent encore 80 % de la normale. La seconde condition écarte "
+            "les articles qui se vendaient simplement mal ce jour-là — partir tôt "
+            "*et* en quantité, c'est une rupture, pas un manque de clients."
         )
 
 with tab2:
     cut_absent = res["absent"][["article", "revenue_12w", "today_hhmm"]].copy()
     cut_absent = cut_absent.rename(columns={
-        "article": "单品", "revenue_12w": "近12期营收", "today_hhmm": "昨天最后售出",
+        "article": "Article", "revenue_12w": "CA_12s", "today_hhmm": "Dernière_vente",
     })
-    cut_absent.insert(1, "原因", "昨天完全没卖出去")
-    cut_absent["昨天份额"] = "0%"
+    cut_absent.insert(1, "Motif", "Aucune vente hier")
+    cut_absent["Part_hier"] = "0 %"
 
-    cut_soft = res["soft"][["article", "revenue_12w", "share_ratio", "qty_ratio"]].copy()
+    cut_soft = res["soft"][["article", "revenue_12w", "share_ratio"]].copy()
     cut_soft = cut_soft.rename(columns={
-        "article": "单品", "revenue_12w": "近12期营收", "share_ratio": "昨天份额",
+        "article": "Article", "revenue_12w": "CA_12s", "share_ratio": "Part_hier",
     })
-    cut_soft.insert(1, "原因", "卖得动，但明显少于它自己的常态")
-    cut_soft["昨天最后售出"] = "正常时段"
-    cut_soft["昨天份额"] = cut_soft["昨天份额"].map(lambda v: f"{v:.0%}")
-    cut_soft = cut_soft[["单品", "原因", "近12期营收", "昨天最后售出", "昨天份额"]]
+    cut_soft.insert(1, "Motif", "Se vend, mais nettement moins que d'habitude")
+    cut_soft["Dernière_vente"] = "Horaire normal"
+    cut_soft["Part_hier"] = cut_soft["Part_hier"].map(
+        lambda v: f"{fr_num(v * 100)} %")
 
     if cut_absent.empty and cut_soft.empty:
-        st.info("没有该砍的单品。")
+        st.info("Aucun article à réduire ce matin.")
     else:
         both = pd.concat([cut_absent, cut_soft], ignore_index=True)
-        both["近12期营收"] = both["近12期营收"].round(0).astype("Int64").map(lambda v: f"{v:,} €")
-        st.dataframe(both, hide_index=True, width='stretch')
+        both["CA_12s"] = (both["CA_12s"].round(0).astype("Int64")
+                          .map(lambda v: f"{fr_num(v)} €"))
+        both = both[["Article", "Motif", "CA_12s", "Dernière_vente", "Part_hier"]]
+        st.dataframe(both, hide_index=True, width="stretch")
         st.caption(
-            f"「明显少于常态」= 昨天卖出的件数占全店的比例，低于它自己在近 12 个"
-            f"{res['weekday']}的同一比例中位数的 {SOFT_SHARE_RATIO:.0%}，"
-            "**并且**它没有提前卖完（提前卖完是备少了，归上面那张表）。"
-            "用份额而不是绝对件数，是因为整个店在各个季节的客流不同——"
-            "9 月全店都少卖三成的时候，绝对件数会把 8 个单品同时误报成卖不动。"
+            "« Nettement moins que d'habitude » = la part de cet article dans les "
+            f"unités vendues du magasin tombe sous {fr_pct(SOFT_SHARE_RATIO * 100)} de "
+            f"sa propre part médiane sur les {12} derniers {jour(res['dow'])}s, **et** il "
+            "n'est pas parti trop tôt (partir trop tôt = sous-production, c'est le "
+            "tableau du dessus). On raisonne en part et non en quantités absolues, "
+            "parce que la fréquentation varie avec la saison : en septembre, quand "
+            "tout le magasin vend 30 % de moins, des quantités absolues signaleraient "
+            "huit articles à tort."
         )
 
 with tab3:
     allit = res["items"].copy()
-    label = {"early": "🔴 早卖完", "soft": "🟠 卖得少",
-             "on_track": "✅ 正常",
-             "absent": "🟢 没卖出", "thin": "⚪ 数据不足"}
-    allit["状态"] = allit["state"].map(label)
+    label = {"early": "🔴 Parti tôt", "soft": "🟠 Vendu peu",
+             "on_track": "✅ Normal",
+             "absent": "🟢 Aucune vente", "thin": "⚪ Données insuffisantes"}
+    allit["État"] = allit["state"].map(label)
     out = allit.assign(
-        单品=allit["article"],
-        近12期营收=allit["revenue_12w"].round(0).astype("Int64").map(lambda v: f"{v:,} €"),
-        平常卖到=allit["base_hhmm"],
-        昨天卖到=allit["today_hhmm"],
-        差了=allit["gap_hhmm"],
-        观测数=allit["n_obs"],
-    )[["状态", "单品", "近12期营收", "平常卖到", "昨天卖到", "差了", "观测数"]]
+        Article=allit["article"],
+        CA_12s=allit["revenue_12w"].round(0).astype("Int64").map(lambda v: f"{fr_num(v)} €"),
+        Habituel=allit["base_hhmm"],
+        Hier=allit["today_hhmm"],
+        Écart=allit["gap_hhmm"],
+        Obs=allit["n_obs"],
+    )[["État", "Article", "CA_12s", "Habituel", "Hier", "Écart", "Obs"]]
     st.dataframe(
-        out.sort_values(["状态", "近12期营收"], ascending=[True, False]),
-        hide_index=True, width='stretch',
+        out.sort_values(["État", "CA_12s"], ascending=[True, False]),
+        hide_index=True, width="stretch",
     )
     st.caption(
-        f"这 20 个单品占近 {CHART_OCC} 个{res['weekday']}营收的 {res['top_share']:.1%}。"
-        "只盯这 20 个，是因为剩下 129 个加起来不到四分之一，管不过来也不值得管。"
+        f"Ces 20 articles pèsent {fr_pct(res['top_share'] * 100, 1)} du CA des "
+        f"{CHART_OCC} derniers {jour(res['dow'])}s. On ne suit qu'eux : les 129 autres "
+        "pèsent ensemble moins d'un quart des ventes, impossible à piloter au "
+        "quotidien et pas rentable à surveiller."
     )
 
 # ---------------------------------------------------------------------------
-# footer: data period + refresh frequency (assignment Step 4 requirement)
+# pied de page : période des données + fréquence de rafraîchissement (étape 4)
 # ---------------------------------------------------------------------------
 st.divider()
 st.caption(
-    f"**数据期间**：{data_start.year} 年 {data_start.month} 月 – "
-    f"{data_end.year} 年 {data_end.month} 月（Kaggle 快照，"
-    f"600 个营业日）。**生产环境刷新频率：每天凌晨一次**（收银机日结后导出）。"
-    f"主管每天 06:30 看一次——刷新和复盘不同频，是因为炉子一天只排一次。"
+    f"**Période des données** : {fr_month(data_start)} – {fr_month(data_end)} "
+    "(instantané Kaggle, 600 jours d'ouverture). "
+    "**Fréquence de rafraîchissement en production : une fois par jour, la nuit** "
+    "(export après clôture de la caisse). La responsable la consulte chaque matin à "
+    "06h30 — rafraîchir et consulter n'ont pas la même fréquence, parce que le four "
+    "n'est chargé qu'une fois par jour."
 )
 
-with st.expander("这个页面故意没放什么，以及哪里容易看错"):
+with st.expander("Ce que cette page ne montre pas — et ce qui peut tromper"):
     st.markdown(
-        """
-**故意没放的两样：**
+        f"""
+**Deux choses volontairement laissées de côté :**
 
-1. **客单价**。全期中位数 3.85 €，p10–p90 只有 3.24–4.79 €，几乎不动。
-   它变化的那点幅度不足以改变任何一炉的产量，放上去只会占掉一个指标位。
-2. **小时级客流曲线**。开门时间固定、生产决策在 07:00 前就做完了，
-   当天的客流曲线对「今天烤多少」永远来得太晚——它是复盘材料，不是决策输入。
-   （如果要它，应该做成打烊后的日报，不是开炉前的大屏。）
+1. **Le panier moyen.** Médiane {fr_num(3.85, 2)} €, p10–p90 entre {fr_num(3.24, 2)} €
+   et {fr_num(4.79, 2)} € : il ne bouge quasiment pas. Son amplitude ne suffit à
+   changer aucune fournée, et l'afficher coûterait une des trois places de la ligne
+   d'indicateurs.
+2. **La courbe de fréquentation heure par heure.** L'ouverture est à heure fixe et la
+   décision de production est prise avant 07h00 ; la courbe du jour arrive toujours
+   trop tard pour la fournée du jour. C'est un matériau de débriefing, pas une entrée
+   de décision. (Si on la veut, elle appartient à un rapport d'après-fermeture, pas à
+   un écran d'avant-aube.)
 
-**容易看错的地方：**
+**Ce qui peut tromper :**
 
-- **37 天没有记录 ≠ 那天卖 0**。这 37 天是歇业，其中 **29 天是周三**（2021 年 1–4 月每周三不开门），
-  所以周三是唯一一个只有 62 个观测的星期。图上断口就是断口，没有补零。
-- **`unit_price` 是法文文本** `"0,90 €"`（逗号当小数点 + 欧元符号 + 窄空格），
-  必须清洗后才能算营收，否则整列变字符串。
-- **`Quantity` 有 1,295 行负数**（0.55%，合计 −2,201 件），是退货/更正。
-  算「最后售出时刻」时已排除，否则会把断货时刻往后推、掩盖真的卖光。
-- **一个 `ticket_number` 可以有多行**（43% 的小票 ≥2 行），所以行数不是客流。
-- **`COUPE`（3,526 €）是切片服务，不是商品**；8 个 `DIVERS *`（合计 10,749 € = 1.92%）是杂项桶，
-  任何品类映射都拆不开——所以这里根本不做品类图。
-- **2021 上半年是疫情低基数**。用「去年同期」基线时，2022 年的同比会偏正；
-  这不是生意突然变好，所以绝对增幅要谨慎读。
-- **周日是周三的 2.5 倍**（22.6% vs 9.0% 年营收）。任何把星期混在一起的均值都没有意义，
-  所以这个页面强迫你先选星期几。
+- **37 jours sans aucune ligne ne sont pas des jours à 0 € de ventes.** Ce sont des
+  fermetures, et **29 sont des mercredis** (fermeture hebdomadaire de janvier à
+  avril 2021). Le mercredi n'a donc que **62 observations** là où les autres jours en
+  ont 88 à 91. Le graphique montre un trou ; il ne trace pas de zéro.
+- **`unit_price` est du texte au format français** — `"0,90 €"` : virgule décimale,
+  symbole euro, espace fine insécable. Il faut le nettoyer avant tout calcul, sinon la
+  colonne reste du texte et le CA devient silencieusement faux.
+- **1 295 lignes (0,55 %) ont une `Quantity` négative**, pour −2 201 unités au total :
+  ce sont des retours et des corrections. Elles sont exclues du calcul de la dernière
+  vente, sinon un retour tardif repousse l'heure de fin et masque une vraie rupture.
+- **Un même `ticket_number` peut contenir plusieurs lignes** (43,0 % des tickets en ont
+  au moins 2) : le nombre de lignes n'est donc pas le nombre de clients.
+  234 005 lignes = 136 451 tickets.
+- **`COUPE` ({fr_num(3526)} €) est un service de tranchage, pas un produit**, et les
+  6 entrées `DIVERS *` ({fr_num(10749)} € = 1,92 %) sont des fourre-tout qu'aucun
+  mapping de catégories ne peut séparer. C'est pourquoi cette page ne comporte
+  **aucun graphique par catégorie** : l'unité de décision de la responsable est
+  l'article, et remonter aux catégories détruirait précisément la granularité sur
+  laquelle elle peut agir.
+- **Le premier semestre 2021 est une base déprimée par la pandémie.** La croissance
+  2022 est en partie un rattrapage : le pourcentage absolu doit être lu avec cette
+  réserve ; le classement des articles, lui, n'est pas affecté.
+- **Le dimanche vaut 2,5 fois le mercredi** (22,6 % contre 9,0 % du CA annuel) : les
+  deux ne sont jamais comparables.
+- **La liste « en moins » est une preuve plus faible que celle « en plus ».** La
+  rupture se voit dans la caisse (l'article s'arrête de se vendre en pleine journée) ;
+  la surproduction, non — elle finit à la poubelle, et la poubelle n'est pas dans
+  l'export. C'est pourquoi on la mesure par un proxy assumé : la part des ventes.
 """
     )
