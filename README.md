@@ -9,7 +9,7 @@ bake less of**, using yesterday's till data.
 **中文** — 一个单页 Streamlit 应用，每天 06:30 开炉前，用昨天收银机的数据告诉一家法国面包店的**生产主管：今天哪几样该多烤、哪几样该少烤**。
 
 - **App:** _(Streamlit Cloud URL — fill in after deploy)_
-- **Repo:** _(public GitHub URL — fill in after push)_
+- **Repo:** <https://github.com/zhousiqi-star/Bakery-Dashboard>
 
 ---
 
