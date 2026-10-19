@@ -1,0 +1,11 @@
+[project]
+name = "bakery-dashboard"
+version = "0.1.0"
+description = "Production-planning dashboard for a single French bakery"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.2",
+    "streamlit>=1.40",
+    "plotly>=5.24",
+]
