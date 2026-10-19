@@ -293,6 +293,18 @@ charts that explain *why* a number moved → bottom = the action tables and the 
 for someone who wants to dig in.
 / 顶部=三个数字（没人会先滚动再看指标）→ 中部=解释"为什么"的两张图 → 底部=可行动的明细表和给想深挖的人看的全表。
 
+**Inside the "Top 20 complet" table**, rows that need an action come first (gone early,
+no sales, sold far below its share), then the normal ones; within each group the sort
+is by revenue **as a number**, descending. This is deliberate and it has one visible
+consequence worth stating: the traditional baguette — **3,965 € over the last 12
+Fridays, 27.7 % of the whole shop's revenue over those same 12 Fridays** — sits in the
+middle of the table, not at the top,
+because yesterday it was perfectly normal and therefore calls for no decision. Sorting
+on the *formatted* string instead would order `"3 965"` below `"973"` (the letter `3`
+sorts before `9`) and push the bakery's single biggest article to the very bottom —
+which is what the first version of this table did, and what a UI test caught.
+/ **"Top 20 complet" 表内**：需要动作的行排在前面（提前卖完、完全没卖、份额远低于常态），然后是正常行；每组内按营收**数值**降序。这是刻意的，且有一个必须说明的可见后果：法棍——近 12 个周五 **3,965 €，占同期全店营收 27.7%**——落在表格中部而不是顶部，因为它昨天完全正常、不需要任何决策。若按**格式化后的字符串**排序，`"3 965"` 会排在 `"973"` 之后（字符 `3` 在 `9` 之前），把全店第一大单品压到表格最底部——这是本表第一版的做法，也是被 UI 测试抓出来的问题。
+
 ---
 
 ## Step 4 — Refresh frequency / 刷新频率
